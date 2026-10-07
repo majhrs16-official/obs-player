@@ -1,0 +1,37 @@
+# Build directories
+build/
+cmake-build-*/
+out/
+
+# Compiled objects and libraries
+*.o
+*.so
+*.dll
+*.dylib
+*.lib
+*.exp
+
+# CMake files
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+*.cmake
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Install directory (local plugin install)
+~/.config/obs-studio/plugins/obs-music-playlist/
+%APPDATA%/obs-studio/plugins/obs-music-playlist/
