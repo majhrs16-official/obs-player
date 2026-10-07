@@ -66,4 +66,4 @@ No properties - automatically observes the audio source's current track.
 
 ## License
 
-MIT License
+GPL-3.0 License
