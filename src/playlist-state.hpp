@@ -60,6 +60,8 @@ public:
         float *buffer);
 
     void set_audio_source(obs_source_t *source);
+    void save_position_and_pause();
+    void resume_from_saved_position();
 
 private:
     void decoder_thread_main();
@@ -103,6 +105,11 @@ private:
 
     std::chrono::steady_clock::time_point playback_start_time;
     bool playback_start_time_set = false;
+
+    // Saved position for scene switching
+    uint64_t saved_played_frames = 0;
+    uint64_t saved_audio_timestamp_ns = 0;
+    bool has_saved_position = false;
 
     obs_source_t *audio_source = nullptr;
     std::mutex audio_source_mutex;

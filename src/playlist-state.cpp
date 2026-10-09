@@ -512,6 +512,56 @@ void PlaylistState::set_active(bool value)
     condition.notify_all();
 }
 
+void PlaylistState::save_position_and_pause()
+{
+    blog(LOG_INFO, "[obs-music-playlist] PlaylistState::save_position_and_pause: played_frames=%llu, audio_timestamp_ns=%llu", played_frames, audio_timestamp_ns);
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+
+        if (!playing || stopped) {
+            blog(LOG_INFO, "[obs-music-playlist] save_position_and_pause: not playing or already stopped");
+            return;
+        }
+
+        saved_played_frames = played_frames;
+        saved_audio_timestamp_ns = audio_timestamp_ns;
+        has_saved_position = true;
+
+        playing = false;
+        playback_start_time_set = false;
+    }
+
+    condition.notify_all();
+}
+
+void PlaylistState::resume_from_saved_position()
+{
+    blog(LOG_INFO, "[obs-music-playlist] PlaylistState::resume_from_saved_position: has_saved=%d, saved_frames=%llu, saved_ts=%llu", 
+         has_saved_position, saved_played_frames, saved_audio_timestamp_ns);
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+
+        if (!has_saved_position || stopped) {
+            blog(LOG_INFO, "[obs-music-playlist] resume_from_saved_position: no saved position or stopped");
+            return;
+        }
+
+        // Restore position
+        played_frames = saved_played_frames;
+        audio_timestamp_ns = saved_audio_timestamp_ns;
+
+        // Seek to saved position
+        seek_pending = true;
+        seek_ms = static_cast<int64_t>(audio_timestamp_ns / 1000000);
+
+        stopped = false;
+        playing = true;
+        playback_start_time_set = false;
+    }
+
+    condition.notify_all();
+}
+
 void PlaylistState::play_pause(bool pause)
 {
     blog(LOG_INFO, "[obs-music-playlist] PlaylistState::play_pause: pause=%d, active=%d, playing=%d, stopped=%d", 

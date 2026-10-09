@@ -153,6 +153,9 @@ static void audio_activate(void *data)
     audio->state->set_audio_source(audio->source);
     audio->state->set_active(true);
 
+    // Resume from saved position
+    audio->state->resume_from_saved_position();
+
     blog(LOG_INFO, "[obs-music-playlist] audio_activate: done");
 }
 
@@ -165,8 +168,8 @@ static void audio_deactivate(void *data)
     if (!audio || !audio->state)
         return;
 
-    // Don't stop playback on scene switch - just update audio output target
-    // The source will be reactivated in the new scene
+    // Save position and pause on scene switch
+    audio->state->save_position_and_pause();
     audio->state->set_audio_source(nullptr);
 
     if (audio->source) {
