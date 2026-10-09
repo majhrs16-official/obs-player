@@ -142,12 +142,14 @@ static void audio_destroy(void *data)
 
 static void audio_activate(void *data)
 {
-    blog(LOG_INFO, "[obs-music-playlist] audio_activate: data=%p", data);
+    blog(LOG_INFO, "[obs-music-playlist] audio_activate: data=%p, source=%p", data, data ? static_cast<MusicPlaylistAudio*>(data)->source : nullptr);
     auto *audio =
         static_cast<MusicPlaylistAudio *>(data);
 
-    if (!audio || !audio->state || !audio->source)
+    if (!audio || !audio->state || !audio->source) {
+        blog(LOG_ERROR, "[obs-music-playlist] audio_activate: null check failed audio=%p state=%p source=%p", audio, audio ? audio->state : nullptr, audio ? audio->source : nullptr);
         return;
+    }
 
     obs_source_addref(audio->source);
     audio->state->set_audio_source(audio->source);
@@ -165,17 +167,18 @@ static void audio_deactivate(void *data)
     auto *audio =
         static_cast<MusicPlaylistAudio *>(data);
 
-    if (!audio || !audio->state)
+    if (!audio || !audio->state) {
+        blog(LOG_ERROR, "[obs-music-playlist] audio_deactivate: null check failed audio=%p state=%p", audio, audio ? audio->state : nullptr);
         return;
+    }
 
     // Save position and pause on scene switch
     audio->state->save_position_and_pause();
     audio->state->set_audio_source(nullptr);
 
-    if (audio->source) {
-        obs_source_release(audio->source);
-        audio->source = nullptr;
-    }
+    // Don't release source here - OBS manages the source lifecycle
+    // The source instance persists across scene switches
+    // audio->source is set in audio_create and cleared in audio_destroy
 
     blog(LOG_INFO, "[obs-music-playlist] audio_deactivate: done");
 }

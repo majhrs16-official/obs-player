@@ -514,7 +514,8 @@ void PlaylistState::set_active(bool value)
 
 void PlaylistState::save_position_and_pause()
 {
-    blog(LOG_INFO, "[obs-music-playlist] PlaylistState::save_position_and_pause: played_frames=%llu, audio_timestamp_ns=%llu", played_frames, audio_timestamp_ns);
+    blog(LOG_INFO, "[obs-music-playlist] PlaylistState::save_position_and_pause: played_frames=%llu, audio_timestamp_ns=%llu, active=%d, playing=%d, stopped=%d, generation=%lu", 
+         played_frames, audio_timestamp_ns, active, playing, stopped, generation);
     {
         std::lock_guard<std::mutex> lock(mutex);
 
@@ -532,12 +533,13 @@ void PlaylistState::save_position_and_pause()
     }
 
     condition.notify_all();
+    blog(LOG_INFO, "[obs-music-playlist] save_position_and_pause: done, has_saved=%d", has_saved_position);
 }
 
 void PlaylistState::resume_from_saved_position()
 {
-    blog(LOG_INFO, "[obs-music-playlist] PlaylistState::resume_from_saved_position: has_saved=%d, saved_frames=%llu, saved_ts=%llu", 
-         has_saved_position, saved_played_frames, saved_audio_timestamp_ns);
+    blog(LOG_INFO, "[obs-music-playlist] PlaylistState::resume_from_saved_position: has_saved=%d, saved_frames=%llu, saved_ts=%llu, active=%d, playing=%d, stopped=%d, generation=%lu", 
+         has_saved_position, saved_played_frames, saved_audio_timestamp_ns, active, playing, stopped, generation);
     {
         std::lock_guard<std::mutex> lock(mutex);
 
@@ -549,6 +551,7 @@ void PlaylistState::resume_from_saved_position()
         // Restore position
         played_frames = saved_played_frames;
         audio_timestamp_ns = saved_audio_timestamp_ns;
+        rate_limit_timestamp_ns = 0;
 
         // Seek to saved position
         seek_pending = true;
@@ -563,6 +566,7 @@ void PlaylistState::resume_from_saved_position()
     }
 
     condition.notify_all();
+    blog(LOG_INFO, "[obs-music-playlist] resume_from_saved_position: done, new generation=%lu, seek_pending=%d", generation, seek_pending);
 }
 
 void PlaylistState::play_pause(bool pause)
@@ -585,6 +589,7 @@ void PlaylistState::play_pause(bool pause)
             if (stopped) {
                 played_frames = 0;
                 audio_timestamp_ns = 0;
+        rate_limit_timestamp_ns = 0;
                 duration_ms = 0;
                 seek_pending = true;
                 seek_ms = 0;
@@ -628,6 +633,7 @@ void PlaylistState::restart()
         seek_ms = 0;
         seek_pending = true;
         audio_timestamp_ns = 0;
+        rate_limit_timestamp_ns = 0;
 
         stopped = false;
         playing = active;
@@ -652,6 +658,7 @@ void PlaylistState::stop()
 
         played_frames = 0;
         audio_timestamp_ns = 0;
+        rate_limit_timestamp_ns = 0;
 
         seek_pending = false;
         seek_ms = 0;
@@ -693,6 +700,7 @@ void PlaylistState::next()
         played_frames = 0;
         duration_ms = 0;
         audio_timestamp_ns = 0;
+        rate_limit_timestamp_ns = 0;
 
         seek_pending = false;
         seek_ms = 0;
@@ -743,6 +751,7 @@ void PlaylistState::previous()
         played_frames = 0;
         duration_ms = 0;
         audio_timestamp_ns = 0;
+        rate_limit_timestamp_ns = 0;
 
         seek_pending = false;
         seek_ms = 0;
@@ -877,6 +886,7 @@ void PlaylistState::advance_after_end_locked()
         played_frames = 0;
         duration_ms = 0;
         audio_timestamp_ns = 0;
+        rate_limit_timestamp_ns = 0;
 
         seek_pending = false;
         seek_ms = 0;
@@ -903,6 +913,7 @@ void PlaylistState::advance_after_end_locked()
     played_frames = 0;
     duration_ms = 0;
     audio_timestamp_ns = 0;
+        rate_limit_timestamp_ns = 0;
 
     seek_pending = false;
     seek_ms = 0;
@@ -994,132 +1005,183 @@ void PlaylistState::decoder_thread_main()
 
             if (do_seek) {
                 decoder.seek_ms(local_seek);
+
+                // Resync rate limiting after seek
+                auto now = std::chrono::steady_clock::now();
+                if (audio_timestamp_ns > 0) {
+                    auto audio_duration = std::chrono::nanoseconds(static_cast<int64_t>(audio_timestamp_ns));
+                    playback_start_time = now - audio_duration;
+                    playback_start_time_set = true;
+                    blog(LOG_INFO, "[obs-music-playlist] decoder: resynced playback_start_time after seek, audio_timestamp_ns=%llu", audio_timestamp_ns);
+                } else {
+                    playback_start_time_set = false;
+                }
             }
         }
 
         bool eof = false;
+        std::deque<float> decoded_buffer;
+        bool just_seeked = do_seek;
 
         while (true) {
             {
                 std::unique_lock<std::mutex> lock(mutex);
 
-                if (shutdown)
+                if (shutdown) {
+                    blog(LOG_INFO, "[obs-music-playlist] decoder: shutdown, exiting");
                     return;
+                }
 
                 if (!active ||
                     local_generation != generation) {
+                    blog(LOG_INFO, "[obs-music-playlist] decoder: breaking, active=%d, local_gen=%lu, gen=%lu", active, local_generation, generation);
                     break;
                 }
 
                 if (!playing) {
+                    blog(LOG_INFO, "[obs-music-playlist] decoder: waiting, playing=%d, active=%d", playing, active);
                     condition.wait(lock, [&] {
                         return shutdown ||
                                !active ||
                                playing ||
                                local_generation != generation;
                     });
+                    blog(LOG_INFO, "[obs-music-playlist] decoder: woke up, shutdown=%d, active=%d, playing=%d, local_gen=%lu, gen=%lu", shutdown, active, playing, local_generation, generation);
                     continue;
                 }
 
                 // Check if seek is pending (e.g., after scene switch resume)
                 if (seek_pending) {
+                    blog(LOG_INFO, "[obs-music-playlist] decoder: seek_pending, breaking to handle seek");
                     break;
                 }
             }
 
-            std::deque<float> decoded;
-
-            if (!decoder.decode(decoded)) {
-                eof = true;
-                break;
-            }
-
-            if (!decoded.empty()) {
-                obs_source_t *source = nullptr;
-
-                {
-                    std::lock_guard<std::mutex> lock(audio_source_mutex);
-                    source = audio_source;
-                    if (source) {
-                        obs_source_addref(source);
-                    }
-                }
-
-                if (!source) {
-                    continue;
-                }
-
-                {
-                    std::lock_guard<std::mutex> lock(mutex);
-
-                    if (shutdown) {
-                        obs_source_release(source);
-                        return;
-                    }
-
-                    if (local_generation != generation) {
-                        obs_source_release(source);
-                        break;
-                    }
-
-                    if (!active) {
-                        blog(LOG_INFO, "[obs-music-playlist] decoder: breaking due to active=%d", active);
-                        obs_source_release(source);
-                        break;
-                    }
-                }
-
-                const std::size_t total_samples = decoded.size();
-                const std::size_t frames = total_samples / OUTPUT_CHANNELS;
-
-                std::vector<float> left(frames);
-                std::vector<float> right(frames);
-
-                for (std::size_t i = 0; i < frames; ++i) {
-                    left[i] = decoded[i * 2];
-                    right[i] = decoded[i * 2 + 1];
-                }
-
-                obs_source_audio audio_data = {};
-                audio_data.data[0] = reinterpret_cast<uint8_t *>(left.data());
-                audio_data.data[1] = reinterpret_cast<uint8_t *>(right.data());
-                audio_data.frames = static_cast<uint32_t>(frames);
-                audio_data.speakers = SPEAKERS_STEREO;
-                audio_data.samples_per_sec = OUTPUT_SAMPLE_RATE;
-                audio_data.format = AUDIO_FORMAT_FLOAT_PLANAR;
-                audio_data.timestamp = audio_timestamp_ns;
-
-                obs_source_output_audio(source, &audio_data);
-
-                audio_timestamp_ns +=
-                    static_cast<uint64_t>(frames) *
-                    1000000000ULL /
-                    OUTPUT_SAMPLE_RATE;
-
-                played_frames += frames;
-
-                // Rate limiting: sleep to match real-time playback
-                auto now = std::chrono::steady_clock::now();
-                if (!playback_start_time_set) {
-                    playback_start_time = now;
-                    playback_start_time_set = true;
+            // Only decode more if buffer is low
+            constexpr std::size_t MIN_BUFFER_FRAMES = 4800; // 100ms at 48kHz
+            if (decoded_buffer.size() < MIN_BUFFER_FRAMES * OUTPUT_CHANNELS) {
+                std::deque<float> new_decoded;
+                if (!decoder.decode(new_decoded)) {
+                    eof = true;
                 } else {
-                    auto expected_elapsed_ns =
-                        static_cast<int64_t>(audio_timestamp_ns);
-                    auto real_elapsed_ns =
-                        std::chrono::duration_cast<
-                            std::chrono::nanoseconds>(
-                            now - playback_start_time)
-                            .count();
-                    int64_t sleep_ns = expected_elapsed_ns - real_elapsed_ns;
-                    if (sleep_ns > 1000000) { // sleep if ahead by > 1ms
-                        std::this_thread::sleep_for(
-                            std::chrono::nanoseconds(sleep_ns));
-                    }
+                    decoded_buffer.insert(decoded_buffer.end(), new_decoded.begin(), new_decoded.end());
+                }
+            }
+
+            if (decoded_buffer.empty()) {
+                if (eof) break;
+                continue;
+            }
+
+            if (just_seeked) {
+                just_seeked = false;
+                // Rate limiting starts fresh from 0 after seek (rate_limit_timestamp_ns was reset)
+                playback_start_time_set = false;
+            }
+
+            obs_source_t *source = nullptr;
+
+            {
+                std::lock_guard<std::mutex> lock(audio_source_mutex);
+                source = audio_source;
+                if (source) {
+                    obs_source_addref(source);
+                }
+            }
+
+            if (!source) {
+                continue;
+            }
+
+            {
+                std::lock_guard<std::mutex> lock(mutex);
+
+                if (shutdown) {
+                    obs_source_release(source);
+                    return;
                 }
 
-                obs_source_release(source);
+                if (local_generation != generation) {
+                    blog(LOG_INFO, "[obs-music-playlist] decoder: generation changed, releasing source");
+                    obs_source_release(source);
+                    break;
+                }
+
+                if (!active) {
+                    blog(LOG_INFO, "[obs-music-playlist] decoder: breaking due to active=%d", active);
+                    obs_source_release(source);
+                    break;
+                }
             }
+
+            // Limit frames per push to avoid buffer overflow after seek
+            constexpr std::size_t MAX_FRAMES_PER_PUSH = 4800; // 100ms at 48kHz
+            const std::size_t total_samples = decoded_buffer.size();
+            std::size_t frames = total_samples / OUTPUT_CHANNELS;
+
+            if (frames > MAX_FRAMES_PER_PUSH) {
+                frames = MAX_FRAMES_PER_PUSH;
+            }
+
+            std::vector<float> left(frames);
+            std::vector<float> right(frames);
+
+            for (std::size_t i = 0; i < frames; ++i) {
+                left[i] = decoded_buffer[i * 2];
+                right[i] = decoded_buffer[i * 2 + 1];
+            }
+
+            // Remove pushed samples from buffer
+            if (total_samples > frames * OUTPUT_CHANNELS) {
+                decoded_buffer.erase(decoded_buffer.begin(),
+                    decoded_buffer.begin() + frames * OUTPUT_CHANNELS);
+            } else {
+                decoded_buffer.clear();
+            }
+
+            obs_source_audio audio_data = {};
+            audio_data.data[0] = reinterpret_cast<uint8_t *>(left.data());
+            audio_data.data[1] = reinterpret_cast<uint8_t *>(right.data());
+            audio_data.frames = static_cast<uint32_t>(frames);
+            audio_data.speakers = SPEAKERS_STEREO;
+            audio_data.samples_per_sec = OUTPUT_SAMPLE_RATE;
+            audio_data.format = AUDIO_FORMAT_FLOAT_PLANAR;
+            audio_data.timestamp = audio_timestamp_ns;
+
+            obs_source_output_audio(source, &audio_data);
+
+            audio_timestamp_ns +=
+                static_cast<uint64_t>(frames) *
+                1000000000ULL /
+                OUTPUT_SAMPLE_RATE;
+            rate_limit_timestamp_ns +=
+                static_cast<uint64_t>(frames) *
+                1000000000ULL /
+                OUTPUT_SAMPLE_RATE;
+
+            played_frames += frames;
+
+            // Rate limiting: sleep to match real-time playback
+            auto now = std::chrono::steady_clock::now();
+            if (!playback_start_time_set) {
+                playback_start_time = now;
+                playback_start_time_set = true;
+            } else {
+                auto expected_elapsed_ns =
+                    static_cast<int64_t>(rate_limit_timestamp_ns);
+                auto real_elapsed_ns =
+                    std::chrono::duration_cast<
+                        std::chrono::nanoseconds>(
+                        now - playback_start_time)
+                        .count();
+                int64_t sleep_ns = expected_elapsed_ns - real_elapsed_ns;
+                if (sleep_ns > 1000000) { // sleep if ahead by > 1ms
+                    std::this_thread::sleep_for(
+                        std::chrono::nanoseconds(sleep_ns));
+                }
+            }
+
+            obs_source_release(source);
         }
 
         if (eof) {

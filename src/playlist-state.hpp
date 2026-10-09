@@ -103,6 +103,9 @@ private:
 
     uint64_t audio_timestamp_ns = 0;
 
+    // Rate limiting uses relative timestamp (reset on seek)
+    uint64_t rate_limit_timestamp_ns = 0;
+
     std::chrono::steady_clock::time_point playback_start_time;
     bool playback_start_time_set = false;
 
