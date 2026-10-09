@@ -554,6 +554,9 @@ void PlaylistState::resume_from_saved_position()
         seek_pending = true;
         seek_ms = static_cast<int64_t>(audio_timestamp_ns / 1000000);
 
+        // Increment generation to force decoder thread to restart at outer loop
+        generation++;
+
         stopped = false;
         playing = true;
         playback_start_time_set = false;
@@ -1016,6 +1019,11 @@ void PlaylistState::decoder_thread_main()
                                local_generation != generation;
                     });
                     continue;
+                }
+
+                // Check if seek is pending (e.g., after scene switch resume)
+                if (seek_pending) {
+                    break;
                 }
             }
 
