@@ -142,6 +142,7 @@ static void audio_destroy(void *data)
 
 static void audio_activate(void *data)
 {
+    blog(LOG_INFO, "[obs-music-playlist] audio_activate: data=%p", data);
     auto *audio =
         static_cast<MusicPlaylistAudio *>(data);
 
@@ -151,6 +152,8 @@ static void audio_activate(void *data)
     obs_source_addref(audio->source);
     audio->state->set_audio_source(audio->source);
     audio->state->set_active(true);
+
+    blog(LOG_INFO, "[obs-music-playlist] audio_activate: done");
 }
 
 static void audio_deactivate(void *data)
@@ -162,8 +165,9 @@ static void audio_deactivate(void *data)
     if (!audio || !audio->state)
         return;
 
+    // Don't stop playback on scene switch - just update audio output target
+    // The source will be reactivated in the new scene
     audio->state->set_audio_source(nullptr);
-    audio->state->set_active(false);
 
     if (audio->source) {
         obs_source_release(audio->source);

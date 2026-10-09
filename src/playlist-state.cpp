@@ -500,7 +500,8 @@ void PlaylistState::set_active(bool value)
         active = value;
 
         if (!active) {
-            playing = false;
+            // Don't stop playback on scene switch - keep playing state
+            // Just reset timing for rate limiting when reactivated
             playback_start_time_set = false;
         } else if (!playlist.empty() && !stopped) {
             playing = true;
