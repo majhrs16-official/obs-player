@@ -157,8 +157,6 @@ static void audio_activate(void *data)
 
     // Resume from saved position
     audio->state->resume_from_saved_position();
-
-    blog(LOG_INFO, "[obs-music-playlist] audio_activate: done");
 }
 
 static void audio_deactivate(void *data)
@@ -179,86 +177,60 @@ static void audio_deactivate(void *data)
     // Don't release source here - OBS manages the source lifecycle
     // The source instance persists across scene switches
     // audio->source is set in audio_create and cleared in audio_destroy
-
-    blog(LOG_INFO, "[obs-music-playlist] audio_deactivate: done");
 }
 
 static void audio_media_play_pause(
     void *data,
     bool pause)
 {
-    blog(LOG_INFO, "[obs-music-playlist] audio_media_play_pause: pause=%d, data=%p", pause, data);
+    blog(LOG_DEBUG, "[obs-music-playlist] audio_media_play_pause: pause=%d", pause);
     auto *audio =
         static_cast<MusicPlaylistAudio *>(data);
 
-    if (!audio) {
-        blog(LOG_ERROR, "[obs-music-playlist] audio_media_play_pause: audio is null");
+    if (!audio || !audio->state)
         return;
-    }
-    if (!audio->state) {
-        blog(LOG_ERROR, "[obs-music-playlist] audio_media_play_pause: audio->state is null");
-        return;
-    }
 
-    blog(LOG_INFO, "[obs-music-playlist] audio_media_play_pause: calling state->play_pause(%d)", pause);
     audio->state->play_pause(pause);
-    blog(LOG_INFO, "[obs-music-playlist] audio_media_play_pause: after play_pause");
 }
 
 static void audio_media_restart(void *data)
 {
-    blog(LOG_INFO, "[obs-music-playlist] audio_media_restart: data=%p", data);
+    blog(LOG_DEBUG, "[obs-music-playlist] audio_media_restart");
     auto *audio =
         static_cast<MusicPlaylistAudio *>(data);
 
-    if (audio && audio->state) {
-        blog(LOG_INFO, "[obs-music-playlist] audio_media_restart: calling restart");
+    if (audio && audio->state)
         audio->state->restart();
-    } else {
-        blog(LOG_ERROR, "[obs-music-playlist] audio_media_restart: audio or state is null");
-    }
 }
 
 static void audio_media_stop(void *data)
 {
-    blog(LOG_INFO, "[obs-music-playlist] audio_media_stop: data=%p", data);
+    blog(LOG_DEBUG, "[obs-music-playlist] audio_media_stop");
     auto *audio =
         static_cast<MusicPlaylistAudio *>(data);
 
-    if (audio && audio->state) {
-        blog(LOG_INFO, "[obs-music-playlist] audio_media_stop: calling stop");
+    if (audio && audio->state)
         audio->state->stop();
-    } else {
-        blog(LOG_ERROR, "[obs-music-playlist] audio_media_stop: audio or state is null");
-    }
 }
 
 static void audio_media_next(void *data)
 {
-    blog(LOG_INFO, "[obs-music-playlist] audio_media_next: data=%p", data);
+    blog(LOG_DEBUG, "[obs-music-playlist] audio_media_next");
     auto *audio =
         static_cast<MusicPlaylistAudio *>(data);
 
-    if (audio && audio->state) {
-        blog(LOG_INFO, "[obs-music-playlist] audio_media_next: calling next");
+    if (audio && audio->state)
         audio->state->next();
-    } else {
-        blog(LOG_ERROR, "[obs-music-playlist] audio_media_next: audio or state is null");
-    }
 }
 
 static void audio_media_previous(void *data)
 {
-    blog(LOG_INFO, "[obs-music-playlist] audio_media_previous: data=%p", data);
+    blog(LOG_DEBUG, "[obs-music-playlist] audio_media_previous");
     auto *audio =
         static_cast<MusicPlaylistAudio *>(data);
 
-    if (audio && audio->state) {
-        blog(LOG_INFO, "[obs-music-playlist] audio_media_previous: calling previous");
+    if (audio && audio->state)
         audio->state->previous();
-    } else {
-        blog(LOG_ERROR, "[obs-music-playlist] audio_media_previous: audio or state is null");
-    }
 }
 
 static int64_t audio_media_get_duration(void *data)

@@ -301,7 +301,7 @@ static void text_update(
     void *data,
     obs_data_t *)
 {
-    blog(LOG_INFO, "[obs-music-playlist] text_update called");
+    blog(LOG_DEBUG, "[obs-music-playlist] text_update called");
 
     auto *text =
         static_cast<MusicPlaylistText *>(data);
@@ -317,7 +317,7 @@ static void text_update(
             ? text->state->current_track_no_ext()
             : "";
 
-    blog(LOG_INFO, "[obs-music-playlist] text_update: current_track='%s'", current.c_str());
+    blog(LOG_DEBUG, "[obs-music-playlist] text_update: current_track='%s'", current.c_str());
 
     text->rendered_text = current;
 
@@ -330,7 +330,7 @@ static void *text_create(
     obs_data_t *settings,
     obs_source_t *)
 {
-    blog(LOG_INFO, "[obs-music-playlist] text_create called");
+    blog(LOG_DEBUG, "[obs-music-playlist] text_create called");
 
     auto *text =
         new MusicPlaylistText();
@@ -354,7 +354,7 @@ static void *text_create(
         return nullptr;
     }
 
-    blog(LOG_INFO, "[obs-music-playlist] Using font: %s", font.c_str());
+    blog(LOG_DEBUG, "[obs-music-playlist] Using font: %s", font.c_str());
 
     if (FT_New_Face(
             text->freetype,
@@ -370,13 +370,13 @@ static void *text_create(
         return nullptr;
     }
 
-    blog(LOG_INFO, "[obs-music-playlist] Font loaded successfully");
+    blog(LOG_DEBUG, "[obs-music-playlist] Font loaded successfully");
 
     text_update(
         text,
         settings);
 
-    blog(LOG_INFO, "[obs-music-playlist] text_create completed successfully");
+    blog(LOG_DEBUG, "[obs-music-playlist] text_create completed successfully");
 
     return text;
 }

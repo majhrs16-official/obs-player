@@ -514,13 +514,13 @@ void PlaylistState::set_active(bool value)
 
 void PlaylistState::save_position_and_pause()
 {
-    blog(LOG_INFO, "[obs-music-playlist] PlaylistState::save_position_and_pause: played_frames=%llu, audio_timestamp_ns=%llu, active=%d, playing=%d, stopped=%d, generation=%lu", 
+    blog(LOG_DEBUG, "[obs-music-playlist] PlaylistState::save_position_and_pause: played_frames=%llu, audio_timestamp_ns=%llu, active=%d, playing=%d, stopped=%d, generation=%lu", 
          played_frames, audio_timestamp_ns, active, playing, stopped, generation);
     {
         std::lock_guard<std::mutex> lock(mutex);
 
         if (!playing || stopped) {
-            blog(LOG_INFO, "[obs-music-playlist] save_position_and_pause: not playing or already stopped");
+            blog(LOG_DEBUG, "[obs-music-playlist] save_position_and_pause: not playing or already stopped");
             return;
         }
 
@@ -533,18 +533,18 @@ void PlaylistState::save_position_and_pause()
     }
 
     condition.notify_all();
-    blog(LOG_INFO, "[obs-music-playlist] save_position_and_pause: done, has_saved=%d", has_saved_position);
+    blog(LOG_DEBUG, "[obs-music-playlist] save_position_and_pause: done, has_saved=%d", has_saved_position);
 }
 
 void PlaylistState::resume_from_saved_position()
 {
-    blog(LOG_INFO, "[obs-music-playlist] PlaylistState::resume_from_saved_position: has_saved=%d, saved_frames=%llu, saved_ts=%llu, active=%d, playing=%d, stopped=%d, generation=%lu", 
+    blog(LOG_DEBUG, "[obs-music-playlist] PlaylistState::resume_from_saved_position: has_saved=%d, saved_frames=%llu, saved_ts=%llu, active=%d, playing=%d, stopped=%d, generation=%lu", 
          has_saved_position, saved_played_frames, saved_audio_timestamp_ns, active, playing, stopped, generation);
     {
         std::lock_guard<std::mutex> lock(mutex);
 
         if (!has_saved_position || stopped) {
-            blog(LOG_INFO, "[obs-music-playlist] resume_from_saved_position: no saved position or stopped");
+            blog(LOG_DEBUG, "[obs-music-playlist] resume_from_saved_position: no saved position or stopped");
             return;
         }
 
@@ -566,18 +566,18 @@ void PlaylistState::resume_from_saved_position()
     }
 
     condition.notify_all();
-    blog(LOG_INFO, "[obs-music-playlist] resume_from_saved_position: done, new generation=%lu, seek_pending=%d", generation, seek_pending);
+    blog(LOG_DEBUG, "[obs-music-playlist] resume_from_saved_position: done, new generation=%lu, seek_pending=%d", generation, seek_pending);
 }
 
 void PlaylistState::play_pause(bool pause)
 {
-    blog(LOG_INFO, "[obs-music-playlist] PlaylistState::play_pause: pause=%d, active=%d, playing=%d, stopped=%d", 
+    blog(LOG_DEBUG, "[obs-music-playlist] PlaylistState::play_pause: pause=%d, active=%d, playing=%d, stopped=%d", 
          pause, active, playing, stopped);
     {
         std::lock_guard<std::mutex> lock(mutex);
 
         if (playlist.empty()) {
-            blog(LOG_INFO, "[obs-music-playlist] PlaylistState::play_pause: playlist empty");
+            blog(LOG_DEBUG, "[obs-music-playlist] PlaylistState::play_pause: playlist empty");
             return;
         }
 
@@ -589,13 +589,13 @@ void PlaylistState::play_pause(bool pause)
             if (stopped) {
                 played_frames = 0;
                 audio_timestamp_ns = 0;
-        rate_limit_timestamp_ns = 0;
+                rate_limit_timestamp_ns = 0;
                 duration_ms = 0;
                 seek_pending = true;
                 seek_ms = 0;
                 stopped = false;
                 ++generation;
-                blog(LOG_INFO, "[obs-music-playlist] play_pause: was stopped, restarting from beginning, generation=%lu", generation);
+                blog(LOG_DEBUG, "[obs-music-playlist] play_pause: was stopped, restarting from beginning, generation=%lu", generation);
             } else {
                 stopped = false;
             }
@@ -607,7 +607,7 @@ void PlaylistState::play_pause(bool pause)
                 auto audio_duration = std::chrono::nanoseconds(static_cast<int64_t>(audio_timestamp_ns));
                 playback_start_time = now - audio_duration;
                 playback_start_time_set = true;
-                blog(LOG_INFO, "[obs-music-playlist] play_pause resume: resynced playback_start_time, audio_timestamp_ns=%llu", audio_timestamp_ns);
+                blog(LOG_DEBUG, "[obs-music-playlist] play_pause resume: resynced playback_start_time, audio_timestamp_ns=%llu", audio_timestamp_ns);
             } else {
                 playback_start_time_set = false;
             }
@@ -615,17 +615,17 @@ void PlaylistState::play_pause(bool pause)
     }
 
     condition.notify_all();
-    blog(LOG_INFO, "[obs-music-playlist] PlaylistState::play_pause: after, playing=%d, stopped=%d", playing, stopped);
+    blog(LOG_DEBUG, "[obs-music-playlist] PlaylistState::play_pause: after, playing=%d, stopped=%d", playing, stopped);
 }
 
 void PlaylistState::restart()
 {
-    blog(LOG_INFO, "[obs-music-playlist] PlaylistState::restart: active=%d, playing=%d", active, playing);
+    blog(LOG_DEBUG, "[obs-music-playlist] PlaylistState::restart: active=%d, playing=%d", active, playing);
     {
         std::lock_guard<std::mutex> lock(mutex);
 
         if (playlist.empty()) {
-            blog(LOG_INFO, "[obs-music-playlist] PlaylistState::restart: playlist empty");
+            blog(LOG_DEBUG, "[obs-music-playlist] PlaylistState::restart: playlist empty");
             return;
         }
 
@@ -644,12 +644,12 @@ void PlaylistState::restart()
     }
 
     condition.notify_all();
-    blog(LOG_INFO, "[obs-music-playlist] PlaylistState::restart: after, generation=%lu", generation);
+    blog(LOG_DEBUG, "[obs-music-playlist] PlaylistState::restart: after, generation=%lu", generation);
 }
 
 void PlaylistState::stop()
 {
-    blog(LOG_INFO, "[obs-music-playlist] PlaylistState::stop");
+    blog(LOG_DEBUG, "[obs-music-playlist] PlaylistState::stop");
     {
         std::lock_guard<std::mutex> lock(mutex);
 
@@ -669,17 +669,17 @@ void PlaylistState::stop()
     }
 
     condition.notify_all();
-    blog(LOG_INFO, "[obs-music-playlist] PlaylistState::stop: after, playing=%d, stopped=%d", playing, stopped);
+    blog(LOG_DEBUG, "[obs-music-playlist] PlaylistState::stop: after, playing=%d, stopped=%d", playing, stopped);
 }
 
 void PlaylistState::next()
 {
-    blog(LOG_INFO, "[obs-music-playlist] PlaylistState::next: current=%zu, size=%zu", current, playlist.size());
+    blog(LOG_DEBUG, "[obs-music-playlist] PlaylistState::next: current=%zu, size=%zu", current, playlist.size());
     {
         std::lock_guard<std::mutex> lock(mutex);
 
         if (playlist.empty()) {
-            blog(LOG_INFO, "[obs-music-playlist] PlaylistState::next: playlist empty");
+            blog(LOG_DEBUG, "[obs-music-playlist] PlaylistState::next: playlist empty");
             return;
         }
 
@@ -691,7 +691,7 @@ void PlaylistState::next()
             } else {
                 stopped = true;
                 playing = false;
-                blog(LOG_INFO, "[obs-music-playlist] PlaylistState::next: REPEAT_NONE, stopping");
+                blog(LOG_DEBUG, "[obs-music-playlist] PlaylistState::next: REPEAT_NONE, stopping");
                 condition.notify_all();
                 return;
             }
@@ -719,7 +719,7 @@ void PlaylistState::next()
         playback_start_time_set = false;
 
         ++generation;
-        blog(LOG_INFO, "[obs-music-playlist] PlaylistState::next: new current=%zu, track=%s", current, current_track_name.c_str());
+        blog(LOG_DEBUG, "[obs-music-playlist] PlaylistState::next: new current=%zu, track=%s", current, current_track_name.c_str());
     }
 
     condition.notify_all();
@@ -727,12 +727,12 @@ void PlaylistState::next()
 
 void PlaylistState::previous()
 {
-    blog(LOG_INFO, "[obs-music-playlist] PlaylistState::previous: current=%zu", current);
+    blog(LOG_DEBUG, "[obs-music-playlist] PlaylistState::previous: current=%zu", current);
     {
         std::lock_guard<std::mutex> lock(mutex);
 
         if (playlist.empty()) {
-            blog(LOG_INFO, "[obs-music-playlist] PlaylistState::previous: playlist empty");
+            blog(LOG_DEBUG, "[obs-music-playlist] PlaylistState::previous: playlist empty");
             return;
         }
 
@@ -742,7 +742,7 @@ void PlaylistState::previous()
             if (repeat_mode == REPEAT_PLAYLIST) {
                 current = playlist.size() - 1;
             } else {
-                blog(LOG_INFO, "[obs-music-playlist] PlaylistState::previous: REPEAT_NONE, at start");
+                blog(LOG_DEBUG, "[obs-music-playlist] PlaylistState::previous: REPEAT_NONE, at start");
                 condition.notify_all();
                 return;
             }
@@ -770,7 +770,7 @@ void PlaylistState::previous()
         playback_start_time_set = false;
 
         ++generation;
-        blog(LOG_INFO, "[obs-music-playlist] PlaylistState::previous: new current=%zu, track=%s", current, current_track_name.c_str());
+        blog(LOG_DEBUG, "[obs-music-playlist] PlaylistState::previous: new current=%zu, track=%s", current, current_track_name.c_str());
     }
 
     condition.notify_all();
@@ -871,18 +871,18 @@ std::string PlaylistState::current_filename_locked() const
 
 void PlaylistState::advance_after_end_locked()
 {
-    blog(LOG_INFO, "[obs-music-playlist] advance_after_end_locked called, repeat_mode=%d, current=%zu, playlist_size=%zu",
+    blog(LOG_DEBUG, "[obs-music-playlist] advance_after_end_locked called, repeat_mode=%d, current=%zu, playlist_size=%zu",
          repeat_mode, current, playlist.size());
 
     if (playlist.empty()) {
-        blog(LOG_INFO, "[obs-music-playlist] playlist empty, stopping");
+        blog(LOG_DEBUG, "[obs-music-playlist] playlist empty, stopping");
         playing = false;
         stopped = true;
         return;
     }
 
     if (repeat_mode == REPEAT_SONG) {
-        blog(LOG_INFO, "[obs-music-playlist] REPEAT_SONG mode, restarting current");
+        blog(LOG_DEBUG, "[obs-music-playlist] REPEAT_SONG mode, restarting current");
         played_frames = 0;
         duration_ms = 0;
         audio_timestamp_ns = 0;
@@ -899,12 +899,12 @@ void PlaylistState::advance_after_end_locked()
 
     if (current + 1 < playlist.size()) {
         ++current;
-        blog(LOG_INFO, "[obs-music-playlist] advancing to next song, current=%zu", current);
-} else if (repeat_mode == REPEAT_PLAYLIST) {
+        blog(LOG_DEBUG, "[obs-music-playlist] advancing to next song, current=%zu", current);
+    } else if (repeat_mode == REPEAT_PLAYLIST) {
             current = 0;
-            blog(LOG_INFO, "[obs-music-playlist] REPEAT_PLAYLIST mode, wrapping to start");
+            blog(LOG_DEBUG, "[obs-music-playlist] REPEAT_PLAYLIST mode, wrapping to start");
         } else {
-            blog(LOG_INFO, "[obs-music-playlist] REPEAT_NONE mode, stopping");
+            blog(LOG_DEBUG, "[obs-music-playlist] REPEAT_NONE mode, stopping");
             playing = false;
             stopped = true;
             return;
@@ -913,7 +913,7 @@ void PlaylistState::advance_after_end_locked()
     played_frames = 0;
     duration_ms = 0;
     audio_timestamp_ns = 0;
-        rate_limit_timestamp_ns = 0;
+    rate_limit_timestamp_ns = 0;
 
     seek_pending = false;
     seek_ms = 0;
@@ -928,7 +928,7 @@ void PlaylistState::advance_after_end_locked()
     current_track_name_no_ext =
         strip_extension(current_track_name);
 
-    blog(LOG_INFO, "[obs-music-playlist] new track: %s", current_track_name.c_str());
+    blog(LOG_DEBUG, "[obs-music-playlist] new track: %s", current_track_name.c_str());
 
     ++generation;
 }
@@ -1012,7 +1012,6 @@ void PlaylistState::decoder_thread_main()
                     auto audio_duration = std::chrono::nanoseconds(static_cast<int64_t>(audio_timestamp_ns));
                     playback_start_time = now - audio_duration;
                     playback_start_time_set = true;
-                    blog(LOG_INFO, "[obs-music-playlist] decoder: resynced playback_start_time after seek, audio_timestamp_ns=%llu", audio_timestamp_ns);
                 } else {
                     playback_start_time_set = false;
                 }
@@ -1028,31 +1027,26 @@ void PlaylistState::decoder_thread_main()
                 std::unique_lock<std::mutex> lock(mutex);
 
                 if (shutdown) {
-                    blog(LOG_INFO, "[obs-music-playlist] decoder: shutdown, exiting");
                     return;
                 }
 
                 if (!active ||
                     local_generation != generation) {
-                    blog(LOG_INFO, "[obs-music-playlist] decoder: breaking, active=%d, local_gen=%lu, gen=%lu", active, local_generation, generation);
                     break;
                 }
 
                 if (!playing) {
-                    blog(LOG_INFO, "[obs-music-playlist] decoder: waiting, playing=%d, active=%d", playing, active);
                     condition.wait(lock, [&] {
                         return shutdown ||
                                !active ||
                                playing ||
                                local_generation != generation;
                     });
-                    blog(LOG_INFO, "[obs-music-playlist] decoder: woke up, shutdown=%d, active=%d, playing=%d, local_gen=%lu, gen=%lu", shutdown, active, playing, local_generation, generation);
                     continue;
                 }
 
                 // Check if seek is pending (e.g., after scene switch resume)
                 if (seek_pending) {
-                    blog(LOG_INFO, "[obs-music-playlist] decoder: seek_pending, breaking to handle seek");
                     break;
                 }
             }
@@ -1102,13 +1096,11 @@ void PlaylistState::decoder_thread_main()
                 }
 
                 if (local_generation != generation) {
-                    blog(LOG_INFO, "[obs-music-playlist] decoder: generation changed, releasing source");
                     obs_source_release(source);
                     break;
                 }
 
                 if (!active) {
-                    blog(LOG_INFO, "[obs-music-playlist] decoder: breaking due to active=%d", active);
                     obs_source_release(source);
                     break;
                 }
@@ -1185,7 +1177,7 @@ void PlaylistState::decoder_thread_main()
         }
 
         if (eof) {
-            blog(LOG_INFO, "[obs-music-playlist] EOF reached, local_gen=%lu, gen=%lu, active=%d, playing=%d",
+            blog(LOG_DEBUG, "[obs-music-playlist] EOF reached, local_gen=%lu, gen=%lu, active=%d, playing=%d",
                  local_generation, generation, active, playing);
 
             std::lock_guard<std::mutex> lock(mutex);
